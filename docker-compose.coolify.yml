@@ -23,10 +23,10 @@ services:
     command:
       - |
         if [ ! -f /home/node/.openclaw/openclaw.json ]; then
-          if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
-            TELEGRAM_BLOCK='"telegram": { "enabled": true, "botToken": "'"$TELEGRAM_BOT_TOKEN"'", "dmPolicy": "allowlist", "allowFrom": ["'"$TELEGRAM_OWNER_ID"'"], "groupPolicy": "allowlist", "streaming": "off" }'
+          if [ -n "$$TELEGRAM_BOT_TOKEN" ]; then
+            TG_BLOCK='"telegram": { "enabled": true, "botToken": "'"$$TELEGRAM_BOT_TOKEN"'", "dmPolicy": "allowlist", "allowFrom": ["'"$$TELEGRAM_OWNER_ID"'"], "groupPolicy": "allowlist", "streaming": "off" }'
           else
-            TELEGRAM_BLOCK='"telegram": { "enabled": false }'
+            TG_BLOCK='"telegram": { "enabled": false }'
           fi
           cat > /home/node/.openclaw/openclaw.json << ENDOFCONFIG
         {
@@ -37,11 +37,11 @@ services:
             }
           },
           "commands": { "native": "auto", "nativeSkills": "auto", "restart": true },
-          "channels": { $TELEGRAM_BLOCK },
+          "channels": { $$TG_BLOCK },
           "gateway": {
             "mode": "local",
             "bind": "loopback",
-            "auth": { "mode": "token", "token": "$OPENCLAW_GATEWAY_TOKEN" }
+            "auth": { "mode": "token", "token": "$$OPENCLAW_GATEWAY_TOKEN" }
           }
         }
         ENDOFCONFIG
