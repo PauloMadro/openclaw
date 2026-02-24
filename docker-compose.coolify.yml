@@ -9,6 +9,7 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      TELEGRAM_OWNER_ID: ${TELEGRAM_OWNER_ID}
       OPENCLAW_VERBOSE: "1"
     volumes:
       - ${OPENCLAW_CONFIG_DIR:-/ape-002}:/home/node/.openclaw
@@ -35,7 +36,8 @@ services:
             "telegram": {
               "enabled": true,
               "botToken": "${TELEGRAM_BOT_TOKEN}",
-              "dmPolicy": "open",
+              "dmPolicy": "allowlist",
+              "allowFrom": ["${TELEGRAM_OWNER_ID}"],
               "groupPolicy": "allowlist",
               "streaming": "off"
             }
