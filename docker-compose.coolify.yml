@@ -23,6 +23,7 @@ services:
         "node",
         "openclaw.mjs",
         "gateway",
+        "--allow-unconfigured",
         "--bind",
         "${OPENCLAW_GATEWAY_BIND:-lan}",
         "--port",
