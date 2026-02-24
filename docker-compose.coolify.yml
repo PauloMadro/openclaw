@@ -18,14 +18,35 @@ services:
       - "${OPENCLAW_BRIDGE_PORT:-18790}:18790"
     init: true
     restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
     command:
-      [
-        "node",
-        "openclaw.mjs",
-        "gateway",
-        "--allow-unconfigured",
-        "--bind",
-        "${OPENCLAW_GATEWAY_BIND:-lan}",
-        "--port",
-        "18789",
-      ]
+      - |
+        if [ ! -f /home/node/.openclaw/openclaw.json ]; then
+          cat > /home/node/.openclaw/openclaw.json << 'EOF'
+        {
+          "agents": {
+            "defaults": {
+              "model": { "primary": "openrouter/google/gemini-3-flash-preview" },
+              "compaction": { "mode": "safeguard" }
+            }
+          },
+          "commands": { "native": "auto", "nativeSkills": "auto", "restart": true },
+          "channels": {
+            "telegram": {
+              "enabled": true,
+              "botToken": "${TELEGRAM_BOT_TOKEN}",
+              "dmPolicy": "allow",
+              "groupPolicy": "allowlist",
+              "streaming": "off"
+            }
+          },
+          "gateway": {
+            "mode": "local",
+            "bind": "lan",
+            "auth": { "mode": "token", "token": "${OPENCLAW_GATEWAY_TOKEN}" }
+          }
+        }
+        EOF
+          echo "[init] default openclaw.json written"
+        fi
+        exec node openclaw.mjs gateway --allow-unconfigured --bind $${OPENCLAW_GATEWAY_BIND:-lan} --port 18789
