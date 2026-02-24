@@ -44,11 +44,11 @@ services:
           },
           "gateway": {
             "mode": "local",
-            "bind": "lan",
+            "bind": "loopback",
             "auth": { "mode": "token", "token": "${OPENCLAW_GATEWAY_TOKEN}" }
           }
         }
         EOF
           echo "[init] default openclaw.json written"
         fi
-        exec node openclaw.mjs gateway --allow-unconfigured --bind $${OPENCLAW_GATEWAY_BIND:-lan} --port 18789
+        exec node openclaw.mjs gateway --allow-unconfigured --bind $${OPENCLAW_GATEWAY_BIND:-loopback} --port 18789
