@@ -47,4 +47,7 @@ services:
         ENDOFCONFIG
           echo "[init] default openclaw.json written"
         fi
+        if [ ! -d /home/node/.openclaw/extensions/townhall-plugin ]; then
+          node openclaw.mjs plugins install /app/customsrc/townhall-plugin --link 2>/dev/null || echo "[init] townhall-plugin install skipped"
+        fi
         exec node openclaw.mjs gateway --allow-unconfigured --bind $${OPENCLAW_GATEWAY_BIND:-loopback} --port 18789

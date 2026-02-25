@@ -1,0 +1,15 @@
+{
+  "id": "townhall-plugin",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "chain": { "type": "string", "default": "ethereum" },
+      "contract": { "type": "string" },
+      "tokenId": { "type": "string" },
+      "apiUrl": { "type": "string", "default": "http://localhost:3000/v3/townhall" },
+      "webhookToken": { "type": "string" },
+      "agentId": { "type": "string", "default": "main" }
+    },
+    "required": ["chain", "contract", "tokenId", "webhookToken"]
+  }
+}
