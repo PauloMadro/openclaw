@@ -10,6 +10,11 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       TELEGRAM_OWNER_ID: ${TELEGRAM_OWNER_ID:-}
+      TOWNHALL_URL: ${TOWNHALL_URL:-}
+      TOWNHALL_CONTRACT: ${TOWNHALL_CONTRACT:-}
+      TOWNHALL_TOKEN_ID: ${TOWNHALL_TOKEN_ID:-}
+      TOWNHALL_WEBHOOK_TOKEN: ${TOWNHALL_WEBHOOK_TOKEN:-}
+      TOWNHALL_CHAIN: ${TOWNHALL_CHAIN:-}
       OPENCLAW_VERBOSE: "1"
     volumes:
       - /ape-002:/home/node/.openclaw
@@ -47,7 +52,7 @@ services:
         ENDOFCONFIG
           echo "[init] default openclaw.json written"
         fi
-        if [ ! -d /home/node/.openclaw/extensions/townhall-plugin ]; then
-          node openclaw.mjs plugins install /app/customsrc/townhall-plugin --link 2>/dev/null || echo "[init] townhall-plugin install skipped"
-        fi
+        echo "[init] installing plugins..."
+        node openclaw.mjs plugins install /app/customsrc/townhall-plugin --link 2>&1 || echo "[init] townhall-plugin install FAILED"
+        node openclaw.mjs plugins install /app/customsrc/polymarket-cli-plugin --link 2>&1 || echo "[init] polymarket-cli-plugin install FAILED"
         exec node openclaw.mjs gateway --allow-unconfigured --bind $${OPENCLAW_GATEWAY_BIND:-loopback} --port 18789
