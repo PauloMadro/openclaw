@@ -54,14 +54,56 @@ services:
         fi
         echo "[init] installing plugins..."
         cd /app || exit 1
-        if [ -d "./customsrc/townhall-plugin" ]; then
-          node openclaw.mjs plugins install ./customsrc/townhall-plugin --link 2>&1 || echo "[init] townhall-plugin install FAILED"
-        else
-          echo "[init] townhall-plugin path missing: ./customsrc/townhall-plugin"
-        fi
-        if [ -d "./customsrc/polymarket-cli-plugin" ]; then
-          node openclaw.mjs plugins install ./customsrc/polymarket-cli-plugin --link 2>&1 || echo "[init] polymarket-cli-plugin install FAILED"
-        else
-          echo "[init] polymarket-cli-plugin path missing: ./customsrc/polymarket-cli-plugin"
-        fi
+        fetch_file() {
+          url="$$1"
+          out="$$2"
+          if command -v curl >/dev/null 2>&1; then
+            curl -fsSL "$$url" -o "$$out"
+          else
+            wget -qO "$$out" "$$url"
+          fi
+        }
+        install_remote_plugin() {
+          plugin_id="$$1"
+          plugin_url="$$2"
+          if [ -z "$$plugin_url" ]; then
+            return 1
+          fi
+          base_url="$$plugin_url"
+          case "$$base_url" in
+            */) ;;
+            *) base_url="$$base_url/" ;;
+          esac
+          local_dir="/tmp/openclaw-plugins/$$plugin_id"
+          rm -rf "$$local_dir"
+          mkdir -p "$$local_dir"
+
+          fetch_file "$${base_url}index.ts" "$$local_dir/index.ts" || return 1
+          fetch_file "$${base_url}openclaw.plugin.json" "$$local_dir/openclaw.plugin.json" || return 1
+          fetch_file "$${base_url}package.json" "$$local_dir/package.json" || return 1
+          fetch_file "$${base_url}README.md" "$$local_dir/README.md" || true
+
+          echo "[init] installing $$plugin_id from $$base_url"
+          node openclaw.mjs plugins install "$$local_dir" --link 2>&1 || echo "[init] $$plugin_id install FAILED"
+          return 0
+        }
+        install_plugin() {
+          plugin_id="$$1"
+          plugin_url="$$2"
+          for path in \
+            "./customsrc/$$plugin_id" \
+            "/home/node/.openclaw/workspace/customsrc/$$plugin_id" \
+            "/home/node/.openclaw/workspace/openclaw/customsrc/$$plugin_id" \
+            "/home/node/.openclaw/workspace/$$plugin_id" \
+            "/home/node/.openclaw/workspace/plugins/$$plugin_id"; do
+            if [ -d "$$path" ]; then
+              echo "[init] installing $$plugin_id from $$path"
+              node openclaw.mjs plugins install "$$path" --link 2>&1 || echo "[init] $$plugin_id install FAILED"
+              return
+            fi
+          done
+          install_remote_plugin "$$plugin_id" "$$plugin_url" || echo "[init] $$plugin_id path missing and remote fetch failed"
+        }
+        install_plugin townhall-plugin "https://bored-agents.mypinata.cloud/ipfs/bafybeibbpr7pti3rju4punlmkgsqib2zqufinibsfixvllvcx7k7r42ej4/"
+        install_plugin polymarket-cli-plugin "https://bored-agents.mypinata.cloud/ipfs/bafybeidswjoonryqiwicvpcxgrr7lop24bzyibxpa3e27d3qertuida46q/"
         exec node openclaw.mjs gateway --allow-unconfigured --bind $${OPENCLAW_GATEWAY_BIND:-loopback} --port 18789
