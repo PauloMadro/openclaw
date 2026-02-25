@@ -33,6 +33,11 @@ services:
           else
             TG_BLOCK='"telegram": { "enabled": false }'
           fi
+          if [ -n "$$TOWNHALL_WEBHOOK_TOKEN" ]; then
+            HOOKS_BLOCK='"hooks": { "enabled": true, "path": "/hooks", "token": "'"$$TOWNHALL_WEBHOOK_TOKEN"'", "allowRequestSessionKey": true },'
+          else
+            HOOKS_BLOCK='"hooks": { "enabled": false },'
+          fi
           cat > /home/node/.openclaw/openclaw.json << ENDOFCONFIG
         {
           "agents": {
@@ -42,6 +47,7 @@ services:
             }
           },
           "commands": { "native": "auto", "nativeSkills": "auto", "restart": true },
+          $$HOOKS_BLOCK
           "channels": { $$TG_BLOCK },
           "gateway": {
             "mode": "local",
@@ -54,6 +60,8 @@ services:
         fi
         echo "[init] installing plugins..."
         cd /app || exit 1
+        # Heal stale plugin paths (for example /tmp/openclaw-plugins/*) before attempting installs.
+        node openclaw.mjs doctor --fix 2>&1 || true
         plugin_cache_root="/home/node/.openclaw/plugins-src"
         mkdir -p "$$plugin_cache_root"
         fetch_file() {
@@ -83,7 +91,7 @@ services:
           fetch_file "$${base_url}index.ts" "$$local_dir/index.ts" || return 1
           fetch_file "$${base_url}openclaw.plugin.json" "$$local_dir/openclaw.plugin.json" || return 1
           fetch_file "$${base_url}package.json" "$$local_dir/package.json" || return 1
-          fetch_file "$${base_url}README.md" "$$local_dir/README.md" || true
+          fetch_file "$${base_url}README.md" "$$local_dir/README.md" 2>/dev/null || true
           echo "[init] prepared $$plugin_id from $$base_url"
           return 0
         }
