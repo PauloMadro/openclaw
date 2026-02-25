@@ -1,0 +1,8 @@
+{
+  "id": "polymarket-cli-plugin",
+  "configSchema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  }
+}

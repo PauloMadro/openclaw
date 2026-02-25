@@ -10,6 +10,6 @@
       "webhookToken": { "type": "string" },
       "agentId": { "type": "string", "default": "main" }
     },
-    "required": ["chain", "contract", "tokenId", "webhookToken"]
+    "required": []
   }
 }

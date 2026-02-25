@@ -44,6 +44,26 @@ export default function register(api: PluginApi) {
   // Track agents currently in proximity to avoid spamming
   const knownAgentsInProximity = new Set<string>();
 
+  function resolveConfig(): TownhallConfig | null {
+    const plugins = api.config.plugins as Record<string, unknown> | undefined;
+    const entries = plugins?.entries as Record<string, Record<string, unknown>> | undefined;
+    const fileConfig = entries?.["townhall-plugin"]?.config as Partial<TownhallConfig> | undefined;
+
+    const config: TownhallConfig = {
+      chain: process.env.TOWNHALL_CHAIN || fileConfig?.chain || "ethereum",
+      contract: process.env.TOWNHALL_CONTRACT || fileConfig?.contract || "",
+      tokenId: process.env.TOWNHALL_TOKEN_ID || fileConfig?.tokenId || "",
+      apiUrl: process.env.TOWNHALL_URL || fileConfig?.apiUrl || "http://localhost:3000/v3/townhall",
+      webhookToken: process.env.TOWNHALL_WEBHOOK_TOKEN || fileConfig?.webhookToken || "",
+      agentId: fileConfig?.agentId || "main",
+    };
+
+    if (!config.contract || !config.tokenId) {
+      return null;
+    }
+    return config;
+  }
+
   api.registerTool({
     name: "townhall_finish_turn",
     description:
@@ -65,17 +85,164 @@ export default function register(api: PluginApi) {
     },
   });
 
+  api.registerTool({
+    name: "townhall_speak",
+    description: "Speak to another agent in the Townhall room.",
+    parameters: {
+      type: "object",
+      properties: {
+        targetAgentId: { type: "number", description: "The ID of the agent to speak to" },
+        message: { type: "string", description: "The message to send" },
+      },
+      required: ["targetAgentId", "message"],
+      additionalProperties: false,
+    },
+    async execute(_id: unknown, params: { targetAgentId: number; message: string }) {
+      const config = resolveConfig();
+      if (!config) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Plugin config not found. Set TOWNHALL_CONTRACT and TOWNHALL_TOKEN_ID env vars.",
+            },
+          ],
+        };
+      }
+
+      try {
+        const res = await fetch(`${config.apiUrl}/room/speak`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chain: config.chain,
+            contract: config.contract,
+            tokenId: config.tokenId,
+            targetAgentId: params.targetAgentId,
+            message: params.message,
+          }),
+        });
+        const data = await res.text();
+        return { content: [{ type: "text", text: `Response (${res.status}): ${data}` }] };
+      } catch (err: unknown) {
+        return {
+          content: [
+            { type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` },
+          ],
+        };
+      }
+    },
+  });
+
+  api.registerTool({
+    name: "townhall_move",
+    description: "Move your agent to a specific coordinate in the Townhall room.",
+    parameters: {
+      type: "object",
+      properties: {
+        x: { type: "number", description: "Target X coordinate (0-29)" },
+        y: { type: "number", description: "Target Y coordinate (0-29)" },
+      },
+      required: ["x", "y"],
+      additionalProperties: false,
+    },
+    async execute(_id: unknown, params: { x: number; y: number }) {
+      const config = resolveConfig();
+      if (!config) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Plugin config not found. Set TOWNHALL_CONTRACT and TOWNHALL_TOKEN_ID env vars.",
+            },
+          ],
+        };
+      }
+
+      try {
+        const res = await fetch(`${config.apiUrl}/room/move`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chain: config.chain,
+            contract: config.contract,
+            tokenId: config.tokenId,
+            x: params.x,
+            y: params.y,
+          }),
+        });
+        const data = await res.text();
+        return { content: [{ type: "text", text: `Response (${res.status}): ${data}` }] };
+      } catch (err: unknown) {
+        return {
+          content: [
+            { type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` },
+          ],
+        };
+      }
+    },
+  });
+
+  api.registerTool({
+    name: "townhall_activity",
+    description: "Set your agent's activity indicator (e.g. 'thinking' or 'idle').",
+    parameters: {
+      type: "object",
+      properties: {
+        activity: {
+          type: "string",
+          description: "The activity state, typically 'thinking' or 'idle'",
+        },
+      },
+      required: ["activity"],
+      additionalProperties: false,
+    },
+    async execute(_id: unknown, params: { activity: string }) {
+      const config = resolveConfig();
+      if (!config) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Plugin config not found. Set TOWNHALL_CONTRACT and TOWNHALL_TOKEN_ID env vars.",
+            },
+          ],
+        };
+      }
+
+      try {
+        const res = await fetch(`${config.apiUrl}/room/activity`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chain: config.chain,
+            contract: config.contract,
+            tokenId: config.tokenId,
+            activity: params.activity,
+          }),
+        });
+        const data = await res.text();
+        return { content: [{ type: "text", text: `Response (${res.status}): ${data}` }] };
+      } catch (err: unknown) {
+        return {
+          content: [
+            { type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` },
+          ],
+        };
+      }
+    },
+  });
+
   api.registerService({
     id: "townhall-poller",
     start: async () => {
       isRunning = true;
-      // eslint-disable-next-line -- dynamic plugin config access
-      const plugins = api.config.plugins as Record<string, unknown> | undefined;
-      const entries = plugins?.entries as Record<string, Record<string, unknown>> | undefined;
-      const config = entries?.["townhall-plugin"]?.config as TownhallConfig | undefined;
+      const config = resolveConfig();
 
-      if (!config || !config.tokenId || !config.webhookToken) {
-        api.logger.warn("Townhall Plugin: Missing required configuration (tokenId, webhookToken).");
+      if (!config || !config.webhookToken) {
+        api.logger.warn(
+          "Townhall Plugin: Missing required configuration. Set TOWNHALL_CONTRACT, TOWNHALL_TOKEN_ID, TOWNHALL_WEBHOOK_TOKEN env vars or plugin config.",
+        );
         return;
       }
 
