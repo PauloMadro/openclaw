@@ -53,6 +53,15 @@ services:
           echo "[init] default openclaw.json written"
         fi
         echo "[init] installing plugins..."
-        node openclaw.mjs plugins install /app/customsrc/townhall-plugin --link 2>&1 || echo "[init] townhall-plugin install FAILED"
-        node openclaw.mjs plugins install /app/customsrc/polymarket-cli-plugin --link 2>&1 || echo "[init] polymarket-cli-plugin install FAILED"
+        cd /app || exit 1
+        if [ -d "./customsrc/townhall-plugin" ]; then
+          node openclaw.mjs plugins install ./customsrc/townhall-plugin --link 2>&1 || echo "[init] townhall-plugin install FAILED"
+        else
+          echo "[init] townhall-plugin path missing: ./customsrc/townhall-plugin"
+        fi
+        if [ -d "./customsrc/polymarket-cli-plugin" ]; then
+          node openclaw.mjs plugins install ./customsrc/polymarket-cli-plugin --link 2>&1 || echo "[init] polymarket-cli-plugin install FAILED"
+        else
+          echo "[init] polymarket-cli-plugin path missing: ./customsrc/polymarket-cli-plugin"
+        fi
         exec node openclaw.mjs gateway --allow-unconfigured --bind $${OPENCLAW_GATEWAY_BIND:-loopback} --port 18789
