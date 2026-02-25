@@ -29,6 +29,8 @@ vi.mock("../infra/outbound/targets.js", async () => {
   };
 });
 
+const { deliverAgentCommandResult } = await import("./agent/delivery.js");
+
 describe("deliverAgentCommandResult", () => {
   function createRuntime(): RuntimeEnv {
     return {
@@ -54,7 +56,6 @@ describe("deliverAgentCommandResult", () => {
     const deps = {} as CliDeps;
     const runtime = params.runtime ?? createRuntime();
     const result = createResult(params.resultText);
-    const { deliverAgentCommandResult } = await import("./agent/delivery.js");
 
     await deliverAgentCommandResult({
       cfg,
@@ -187,6 +188,49 @@ describe("deliverAgentCommandResult", () => {
 
     expect(mocks.resolveOutboundTarget).toHaveBeenCalledWith(
       expect.objectContaining({ channel: "slack", to: "#reports", accountId: "ops" }),
+    );
+  });
+
+  it("uses runContext turn source over stale session last route", async () => {
+    await runDelivery({
+      opts: {
+        message: "hello",
+        deliver: true,
+        runContext: {
+          messageChannel: "whatsapp",
+          currentChannelId: "+15559876543",
+          accountId: "work",
+        },
+      },
+      sessionEntry: {
+        lastChannel: "slack",
+        lastTo: "U_WRONG",
+        lastAccountId: "wrong",
+      } as SessionEntry,
+    });
+
+    expect(mocks.resolveOutboundTarget).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: "whatsapp", to: "+15559876543", accountId: "work" }),
+    );
+  });
+
+  it("does not reuse session lastTo when runContext source omits currentChannelId", async () => {
+    await runDelivery({
+      opts: {
+        message: "hello",
+        deliver: true,
+        runContext: {
+          messageChannel: "whatsapp",
+        },
+      },
+      sessionEntry: {
+        lastChannel: "slack",
+        lastTo: "U_WRONG",
+      } as SessionEntry,
+    });
+
+    expect(mocks.resolveOutboundTarget).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: "whatsapp", to: undefined }),
     );
   });
 

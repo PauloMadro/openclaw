@@ -91,6 +91,7 @@ export type RegisterTelegramHandlerParams = {
   opts: TelegramBotOptions;
   runtime: RuntimeEnv;
   telegramCfg: TelegramAccountConfig;
+  allowFrom?: Array<string | number>;
   groupAllowFrom?: Array<string | number>;
   resolveGroupPolicy: (chatId: string | number) => ChannelGroupPolicy;
   resolveTelegramGroupConfig: (
@@ -578,6 +579,7 @@ export const registerTelegramNativeCommands = ({
             SenderId: senderId || undefined,
             SenderUsername: senderUsername || undefined,
             Surface: "telegram",
+            Provider: "telegram",
             MessageSid: String(msg.message_id),
             Timestamp: msg.date ? msg.date * 1000 : undefined,
             WasMentioned: true,

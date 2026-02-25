@@ -412,7 +412,7 @@ async function resolveFeishuMediaList(params: {
 
     // For message media, always use messageResource API
     // The image.get API is only for images uploaded via im/v1/images, not for message attachments
-    const fileKey = mediaKeys.imageKey || mediaKeys.fileKey;
+    const fileKey = mediaKeys.fileKey || mediaKeys.imageKey;
     if (!fileKey) {
       return [];
     }
@@ -522,6 +522,7 @@ export async function handleFeishuMessage(params: {
 
   let ctx = parseFeishuMessageEvent(event, botOpenId);
   const isGroup = ctx.chatType === "group";
+  const senderUserId = event.sender.sender_id.user_id?.trim() || undefined;
 
   // Resolve sender display name (best-effort) so the agent can attribute messages correctly.
   const senderResult = await resolveFeishuSenderName({
@@ -601,6 +602,7 @@ export async function handleFeishuMessage(params: {
         groupPolicy: "allowlist",
         allowFrom: senderAllowFrom,
         senderId: ctx.senderOpenId,
+        senderIds: [senderUserId],
         senderName: ctx.senderName,
       });
       if (!senderAllowed) {
@@ -653,6 +655,7 @@ export async function handleFeishuMessage(params: {
     const dmAllowed = resolveFeishuAllowlistMatch({
       allowFrom: effectiveDmAllowFrom,
       senderId: ctx.senderOpenId,
+      senderIds: [senderUserId],
       senderName: ctx.senderName,
     }).allowed;
 
@@ -690,10 +693,13 @@ export async function handleFeishuMessage(params: {
       return;
     }
 
-    const commandAllowFrom = isGroup ? (groupConfig?.allowFrom ?? []) : effectiveDmAllowFrom;
+    const commandAllowFrom = isGroup
+      ? (groupConfig?.allowFrom ?? configAllowFrom)
+      : effectiveDmAllowFrom;
     const senderAllowedForCommands = resolveFeishuAllowlistMatch({
       allowFrom: commandAllowFrom,
       senderId: ctx.senderOpenId,
+      senderIds: [senderUserId],
       senderName: ctx.senderName,
     }).allowed;
     const commandAuthorized = shouldComputeCommandAuthorized
@@ -714,10 +720,10 @@ export async function handleFeishuMessage(params: {
     // When topicSessionMode is enabled, messages within a topic (identified by root_id)
     // get a separate session from the main group chat.
     let peerId = isGroup ? ctx.chatId : ctx.senderOpenId;
+    let topicSessionMode: "enabled" | "disabled" = "disabled";
     if (isGroup && ctx.rootId) {
       const groupConfig = resolveFeishuGroupConfig({ cfg: feishuCfg, groupId: ctx.chatId });
-      const topicSessionMode =
-        groupConfig?.topicSessionMode ?? feishuCfg?.topicSessionMode ?? "disabled";
+      topicSessionMode = groupConfig?.topicSessionMode ?? feishuCfg?.topicSessionMode ?? "disabled";
       if (topicSessionMode === "enabled") {
         // Use chatId:topic:rootId as peer ID for topic-scoped sessions
         peerId = `${ctx.chatId}:topic:${ctx.rootId}`;
@@ -733,6 +739,14 @@ export async function handleFeishuMessage(params: {
         kind: isGroup ? "group" : "direct",
         id: peerId,
       },
+      // Add parentPeer for binding inheritance in topic mode
+      parentPeer:
+        isGroup && ctx.rootId && topicSessionMode === "enabled"
+          ? {
+              kind: "group",
+              id: ctx.chatId,
+            }
+          : null,
     });
 
     // Dynamic agent creation for DM users

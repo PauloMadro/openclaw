@@ -8,7 +8,6 @@ import { MINIMAX_API_BASE_URL, MINIMAX_CN_API_BASE_URL } from "./onboard-auth.js
 import {
   createThrowingRuntime,
   readJsonFile,
-  runNonInteractiveOnboardingWithDefaults,
   type NonInteractiveRuntime,
 } from "./onboard-non-interactive.test-helpers.js";
 import { OPENAI_DEFAULT_MODEL } from "./openai-model-default.js";
@@ -27,6 +26,15 @@ vi.mock("./onboard-helpers.js", async (importOriginal) => {
     ensureWorkspaceAndSessions: ensureWorkspaceAndSessionsMock,
   };
 });
+
+const { runNonInteractiveOnboarding } = await import("./onboard-non-interactive.js");
+
+const NON_INTERACTIVE_DEFAULT_OPTIONS = {
+  nonInteractive: true,
+  skipHealth: true,
+  skipChannels: true,
+  json: true,
+} as const;
 
 let ensureAuthProfileStore: typeof import("../agents/auth-profiles.js").ensureAuthProfileStore;
 let upsertAuthProfile: typeof import("../agents/auth-profiles.js").upsertAuthProfile;
@@ -58,7 +66,7 @@ async function removeDirWithRetry(dir: string): Promise<void> {
       if (!isTransient || attempt === 4) {
         throw error;
       }
-      await delay(25 * (attempt + 1));
+      await delay(10 * (attempt + 1));
     }
   }
 }
@@ -93,6 +101,19 @@ async function withOnboardEnv(
   } finally {
     await removeDirWithRetry(tempHome);
   }
+}
+
+async function runNonInteractiveOnboardingWithDefaults(
+  runtime: NonInteractiveRuntime,
+  options: Record<string, unknown>,
+): Promise<void> {
+  await runNonInteractiveOnboarding(
+    {
+      ...NON_INTERACTIVE_DEFAULT_OPTIONS,
+      ...options,
+    },
+    runtime,
+  );
 }
 
 async function runOnboardingAndReadConfig(
@@ -168,7 +189,7 @@ describe("onboard (non-interactive): provider auth", () => {
         key: "sk-minimax-test",
       });
     });
-  }, 60_000);
+  });
 
   it("supports MiniMax CN API endpoint auth choice", async () => {
     await withOnboardEnv("openclaw-onboard-minimax-cn-", async (env) => {
@@ -187,7 +208,7 @@ describe("onboard (non-interactive): provider auth", () => {
         key: "sk-minimax-test",
       });
     });
-  }, 60_000);
+  });
 
   it("stores Z.AI API key and uses global baseUrl by default", async () => {
     await withOnboardEnv("openclaw-onboard-zai-", async (env) => {
@@ -202,7 +223,7 @@ describe("onboard (non-interactive): provider auth", () => {
       expect(cfg.agents?.defaults?.model?.primary).toBe("zai/glm-5");
       await expectApiKeyProfile({ profileId: "zai:default", provider: "zai", key: "zai-test-key" });
     });
-  }, 60_000);
+  });
 
   it("supports Z.AI CN coding endpoint auth choice", async () => {
     await withOnboardEnv("openclaw-onboard-zai-cn-", async (env) => {
@@ -215,7 +236,7 @@ describe("onboard (non-interactive): provider auth", () => {
         "https://open.bigmodel.cn/api/coding/paas/v4",
       );
     });
-  }, 60_000);
+  });
 
   it("stores xAI API key and sets default model", async () => {
     await withOnboardEnv("openclaw-onboard-xai-", async (env) => {
@@ -230,7 +251,24 @@ describe("onboard (non-interactive): provider auth", () => {
       expect(cfg.agents?.defaults?.model?.primary).toBe("xai/grok-4");
       await expectApiKeyProfile({ profileId: "xai:default", provider: "xai", key: "xai-test-key" });
     });
-  }, 60_000);
+  });
+
+  it("infers Mistral auth choice from --mistral-api-key and sets default model", async () => {
+    await withOnboardEnv("openclaw-onboard-mistral-infer-", async (env) => {
+      const cfg = await runOnboardingAndReadConfig(env, {
+        mistralApiKey: "mistral-test-key",
+      });
+
+      expect(cfg.auth?.profiles?.["mistral:default"]?.provider).toBe("mistral");
+      expect(cfg.auth?.profiles?.["mistral:default"]?.mode).toBe("api_key");
+      expect(cfg.agents?.defaults?.model?.primary).toBe("mistral/mistral-large-latest");
+      await expectApiKeyProfile({
+        profileId: "mistral:default",
+        provider: "mistral",
+        key: "mistral-test-key",
+      });
+    });
+  });
 
   it("stores Volcano Engine API key and sets default model", async () => {
     await withOnboardEnv("openclaw-onboard-volcengine-", async (env) => {
@@ -241,7 +279,7 @@ describe("onboard (non-interactive): provider auth", () => {
 
       expect(cfg.agents?.defaults?.model?.primary).toBe("volcengine-plan/ark-code-latest");
     });
-  }, 60_000);
+  });
 
   it("infers BytePlus auth choice from --byteplus-api-key and sets default model", async () => {
     await withOnboardEnv("openclaw-onboard-byteplus-infer-", async (env) => {
@@ -251,7 +289,7 @@ describe("onboard (non-interactive): provider auth", () => {
 
       expect(cfg.agents?.defaults?.model?.primary).toBe("byteplus-plan/ark-code-latest");
     });
-  }, 60_000);
+  });
 
   it("stores Vercel AI Gateway API key and sets default model", async () => {
     await withOnboardEnv("openclaw-onboard-ai-gateway-", async (env) => {
@@ -271,7 +309,7 @@ describe("onboard (non-interactive): provider auth", () => {
         key: "gateway-test-key",
       });
     });
-  }, 60_000);
+  });
 
   it("stores token auth profile", async () => {
     await withOnboardEnv("openclaw-onboard-token-", async ({ configPath, runtime }) => {
@@ -298,7 +336,7 @@ describe("onboard (non-interactive): provider auth", () => {
         expect(profile.token).toBe(cleanToken);
       }
     });
-  }, 60_000);
+  });
 
   it("stores OpenAI API key and sets OpenAI default model", async () => {
     await withOnboardEnv("openclaw-onboard-openai-", async (env) => {
@@ -309,7 +347,7 @@ describe("onboard (non-interactive): provider auth", () => {
 
       expect(cfg.agents?.defaults?.model?.primary).toBe(OPENAI_DEFAULT_MODEL);
     });
-  }, 60_000);
+  });
 
   it("rejects vLLM auth choice in non-interactive mode", async () => {
     await withOnboardEnv("openclaw-onboard-vllm-non-interactive-", async ({ runtime }) => {
@@ -320,7 +358,7 @@ describe("onboard (non-interactive): provider auth", () => {
         }),
       ).rejects.toThrow('Auth choice "vllm" requires interactive mode.');
     });
-  }, 60_000);
+  });
 
   it("stores LiteLLM API key and sets default model", async () => {
     await withOnboardEnv("openclaw-onboard-litellm-", async (env) => {
@@ -338,7 +376,7 @@ describe("onboard (non-interactive): provider auth", () => {
         key: "litellm-test-key",
       });
     });
-  }, 60_000);
+  });
 
   it.each([
     {
@@ -353,37 +391,31 @@ describe("onboard (non-interactive): provider auth", () => {
       prefix: "openclaw-onboard-cf-gateway-infer-",
       options: {},
     },
-  ])(
-    "$name",
-    async ({ prefix, options }) => {
-      await withOnboardEnv(prefix, async ({ configPath, runtime }) => {
-        await runNonInteractiveOnboardingWithDefaults(runtime, {
-          cloudflareAiGatewayAccountId: "cf-account-id",
-          cloudflareAiGatewayGatewayId: "cf-gateway-id",
-          cloudflareAiGatewayApiKey: "cf-gateway-test-key",
-          skipSkills: true,
-          ...options,
-        });
-
-        const cfg = await readJsonFile<ProviderAuthConfigSnapshot>(configPath);
-
-        expect(cfg.auth?.profiles?.["cloudflare-ai-gateway:default"]?.provider).toBe(
-          "cloudflare-ai-gateway",
-        );
-        expect(cfg.auth?.profiles?.["cloudflare-ai-gateway:default"]?.mode).toBe("api_key");
-        expect(cfg.agents?.defaults?.model?.primary).toBe(
-          "cloudflare-ai-gateway/claude-sonnet-4-5",
-        );
-        await expectApiKeyProfile({
-          profileId: "cloudflare-ai-gateway:default",
-          provider: "cloudflare-ai-gateway",
-          key: "cf-gateway-test-key",
-          metadata: { accountId: "cf-account-id", gatewayId: "cf-gateway-id" },
-        });
+  ])("$name", async ({ prefix, options }) => {
+    await withOnboardEnv(prefix, async ({ configPath, runtime }) => {
+      await runNonInteractiveOnboardingWithDefaults(runtime, {
+        cloudflareAiGatewayAccountId: "cf-account-id",
+        cloudflareAiGatewayGatewayId: "cf-gateway-id",
+        cloudflareAiGatewayApiKey: "cf-gateway-test-key",
+        skipSkills: true,
+        ...options,
       });
-    },
-    60_000,
-  );
+
+      const cfg = await readJsonFile<ProviderAuthConfigSnapshot>(configPath);
+
+      expect(cfg.auth?.profiles?.["cloudflare-ai-gateway:default"]?.provider).toBe(
+        "cloudflare-ai-gateway",
+      );
+      expect(cfg.auth?.profiles?.["cloudflare-ai-gateway:default"]?.mode).toBe("api_key");
+      expect(cfg.agents?.defaults?.model?.primary).toBe("cloudflare-ai-gateway/claude-sonnet-4-5");
+      await expectApiKeyProfile({
+        profileId: "cloudflare-ai-gateway:default",
+        provider: "cloudflare-ai-gateway",
+        key: "cf-gateway-test-key",
+        metadata: { accountId: "cf-account-id", gatewayId: "cf-gateway-id" },
+      });
+    });
+  });
 
   it("infers Together auth choice from --together-api-key and sets default model", async () => {
     await withOnboardEnv("openclaw-onboard-together-infer-", async (env) => {
@@ -400,7 +432,7 @@ describe("onboard (non-interactive): provider auth", () => {
         key: "together-test-key",
       });
     });
-  }, 60_000);
+  });
 
   it("infers QIANFAN auth choice from --qianfan-api-key and sets default model", async () => {
     await withOnboardEnv("openclaw-onboard-qianfan-infer-", async (env) => {
@@ -417,7 +449,7 @@ describe("onboard (non-interactive): provider auth", () => {
         key: "qianfan-test-key",
       });
     });
-  }, 60_000);
+  });
 
   it("configures a custom provider from non-interactive flags", async () => {
     await withOnboardEnv("openclaw-onboard-custom-provider-", async ({ configPath, runtime }) => {
@@ -439,7 +471,7 @@ describe("onboard (non-interactive): provider auth", () => {
       expect(provider?.models?.some((model) => model.id === "foo-large")).toBe(true);
       expect(cfg.agents?.defaults?.model?.primary).toBe("custom-llm-example-com/foo-large");
     });
-  }, 60_000);
+  });
 
   it("infers custom provider auth choice from custom flags", async () => {
     await withOnboardEnv(
@@ -463,7 +495,7 @@ describe("onboard (non-interactive): provider auth", () => {
         expect(cfg.agents?.defaults?.model?.primary).toBe("custom-models-custom-local/local-large");
       },
     );
-  }, 60_000);
+  });
 
   it("uses CUSTOM_API_KEY env fallback for non-interactive custom provider auth", async () => {
     await withOnboardEnv(
@@ -474,7 +506,7 @@ describe("onboard (non-interactive): provider auth", () => {
         expect(await readCustomLocalProviderApiKey(configPath)).toBe("custom-env-key");
       },
     );
-  }, 60_000);
+  });
 
   it("uses matching profile fallback for non-interactive custom provider auth", async () => {
     await withOnboardEnv(
@@ -492,7 +524,7 @@ describe("onboard (non-interactive): provider auth", () => {
         expect(await readCustomLocalProviderApiKey(configPath)).toBe("custom-profile-key");
       },
     );
-  }, 60_000);
+  });
 
   it("fails custom provider auth when compatibility is invalid", async () => {
     await withOnboardEnv(
@@ -509,7 +541,7 @@ describe("onboard (non-interactive): provider auth", () => {
         ).rejects.toThrow('Invalid --custom-compatibility (use "openai" or "anthropic").');
       },
     );
-  }, 60_000);
+  });
 
   it("fails custom provider auth when explicit provider id is invalid", async () => {
     await withOnboardEnv("openclaw-onboard-custom-provider-invalid-id-", async ({ runtime }) => {
@@ -525,7 +557,7 @@ describe("onboard (non-interactive): provider auth", () => {
         "Invalid custom provider config: Custom provider ID must include letters, numbers, or hyphens.",
       );
     });
-  }, 60_000);
+  });
 
   it("fails inferred custom auth when required flags are incomplete", async () => {
     await withOnboardEnv(
@@ -539,5 +571,5 @@ describe("onboard (non-interactive): provider auth", () => {
         ).rejects.toThrow('Auth choice "custom-api-key" requires a base URL and model ID.');
       },
     );
-  }, 60_000);
+  });
 });
