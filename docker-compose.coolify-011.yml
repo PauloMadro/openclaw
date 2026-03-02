@@ -34,11 +34,19 @@ services:
           else
             HOOKS_BLOCK='"hooks": { "enabled": false },'
           fi
+          if [ -n "$$OPENROUTER_API_KEY" ]; then
+            MODEL_PRIMARY="openrouter/google/gemini-3-flash-preview"
+          elif [ -n "$$ANTHROPIC_API_KEY" ]; then
+            MODEL_PRIMARY="claude-haiku-4-5-20251001"
+          else
+            echo "[init] ERROR: No API key found. Set OPENROUTER_API_KEY or ANTHROPIC_API_KEY." >&2
+            exit 1
+          fi
           cat > /home/node/.openclaw/openclaw.json << ENDOFCONFIG
         {
           "agents": {
             "defaults": {
-              "model": { "primary": "openrouter/google/gemini-3-flash-preview" },
+              "model": { "primary": "$$MODEL_PRIMARY" },
               "compaction": { "mode": "safeguard" }
             }
           },
