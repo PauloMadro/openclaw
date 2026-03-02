@@ -20,6 +20,7 @@ import { normalizeAllowListLower } from "../../slack/monitor/allow-list.js";
 import { parseSlackTarget } from "../../slack/targets.js";
 import { buildTelegramGroupPeerId } from "../../telegram/bot/helpers.js";
 import { resolveTelegramTargetChatType } from "../../telegram/inline-buttons.js";
+import { parseTelegramThreadId } from "../../telegram/outbound-params.js";
 import { parseTelegramTarget } from "../../telegram/targets.js";
 import { isWhatsAppGroupJid, normalizeWhatsAppTarget } from "../../whatsapp/normalize.js";
 import type { ResolvedMessagingTarget } from "./target-resolver.js";
@@ -161,9 +162,7 @@ async function resolveSlackChannelType(params: {
     return "channel";
   }
 
-  const token =
-    account.botToken?.trim() ||
-    (typeof account.config.userToken === "string" ? account.config.userToken.trim() : "");
+  const token = account.botToken?.trim() || account.userToken || "";
   if (!token) {
     SLACK_CHANNEL_TYPE_CACHE.set(`${account.accountId}:${channelId}`, "unknown");
     return "unknown";
@@ -285,8 +284,7 @@ function resolveTelegramSession(
   }
   const parsedThreadId = parsed.messageThreadId;
   const fallbackThreadId = normalizeThreadId(params.threadId);
-  const resolvedThreadId =
-    parsedThreadId ?? (fallbackThreadId ? Number.parseInt(fallbackThreadId, 10) : undefined);
+  const resolvedThreadId = parsedThreadId ?? parseTelegramThreadId(fallbackThreadId);
   // Telegram topics are encoded in the peer id (chatId:topic:<id>).
   const chatType = resolveTelegramTargetChatType(params.target);
   // If the target is a username and we lack a resolvedTarget, default to DM to avoid group keys.
@@ -786,7 +784,7 @@ function resolveTlonSession(
 
 /**
  * Feishu ID formats:
- * - oc_xxx: chat_id (group chat)
+ * - oc_xxx: chat_id (can be group or DM, use chat_mode to distinguish or explicit dm:/group: prefix)
  * - ou_xxx: user open_id (DM)
  * - on_xxx: user union_id (DM)
  * - cli_xxx: app_id (not a valid send target)
@@ -802,20 +800,27 @@ function resolveFeishuSession(
 
   const lower = trimmed.toLowerCase();
   let isGroup = false;
+  let typeExplicit = false;
 
   if (lower.startsWith("group:") || lower.startsWith("chat:")) {
     trimmed = trimmed.replace(/^(group|chat):/i, "").trim();
     isGroup = true;
+    typeExplicit = true;
   } else if (lower.startsWith("user:") || lower.startsWith("dm:")) {
     trimmed = trimmed.replace(/^(user|dm):/i, "").trim();
     isGroup = false;
+    typeExplicit = true;
   }
 
   const idLower = trimmed.toLowerCase();
-  if (idLower.startsWith("oc_")) {
-    isGroup = true;
-  } else if (idLower.startsWith("ou_") || idLower.startsWith("on_")) {
-    isGroup = false;
+  // Only infer type from ID prefix if not explicitly specified
+  // Note: oc_ is a chat_id and can be either group or DM (must check chat_mode from API)
+  // Only ou_/on_ can be reliably identified as user IDs (always DM)
+  if (!typeExplicit) {
+    if (idLower.startsWith("ou_") || idLower.startsWith("on_")) {
+      isGroup = false;
+    }
+    // oc_ requires explicit prefix: dm:oc_xxx or group:oc_xxx
   }
 
   const peer: RoutePeer = {
