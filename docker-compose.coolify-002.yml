@@ -10,11 +10,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       TELEGRAM_OWNER_ID: ${TELEGRAM_OWNER_ID:-}
-      TOWNHALL_URL: ${TOWNHALL_URL:-}
-      TOWNHALL_CONTRACT: ${TOWNHALL_CONTRACT:-}
-      TOWNHALL_TOKEN_ID: ${TOWNHALL_TOKEN_ID:-}
       TOWNHALL_WEBHOOK_TOKEN: ${TOWNHALL_WEBHOOK_TOKEN:-}
-      TOWNHALL_CHAIN: ${TOWNHALL_CHAIN:-}
       OPENCLAW_VERBOSE: "1"
     volumes:
       - /ape-002:/home/node/.openclaw
@@ -58,73 +54,4 @@ services:
         ENDOFCONFIG
           echo "[init] default openclaw.json written"
         fi
-        echo "[init] installing plugins..."
-        cd /app || exit 1
-        # Heal stale plugin paths (for example /tmp/openclaw-plugins/*) before attempting installs.
-        node openclaw.mjs doctor --fix 2>&1 || true
-        plugin_cache_root="/home/node/.openclaw/plugins-src"
-        mkdir -p "$$plugin_cache_root"
-        fetch_file() {
-          url="$$1"
-          out="$$2"
-          if command -v curl >/dev/null 2>&1; then
-            curl -fsSL "$$url" -o "$$out"
-          else
-            wget -qO "$$out" "$$url"
-          fi
-        }
-        prepare_remote_plugin() {
-          plugin_id="$$1"
-          plugin_url="$$2"
-          if [ -z "$$plugin_url" ]; then
-            return 1
-          fi
-          base_url="$$plugin_url"
-          case "$$base_url" in
-            */) ;;
-            *) base_url="$$base_url/" ;;
-          esac
-          local_dir="$$plugin_cache_root/$$plugin_id"
-          rm -rf "$$local_dir"
-          mkdir -p "$$local_dir"
-
-          fetch_file "$${base_url}index.ts" "$$local_dir/index.ts" || return 1
-          fetch_file "$${base_url}openclaw.plugin.json" "$$local_dir/openclaw.plugin.json" || return 1
-          fetch_file "$${base_url}package.json" "$$local_dir/package.json" || return 1
-          fetch_file "$${base_url}README.md" "$$local_dir/README.md" 2>/dev/null || true
-          echo "[init] prepared $$plugin_id from $$base_url"
-          return 0
-        }
-
-        install_plugin_from_path() {
-          plugin_id="$$1"
-          plugin_path="$$2"
-          echo "[init] installing $$plugin_id from $$plugin_path"
-          node openclaw.mjs plugins install "$$plugin_path" --link 2>&1 || echo "[init] $$plugin_id install FAILED"
-        }
-
-        install_plugin() {
-          plugin_id="$$1"
-          cached_path="$$plugin_cache_root/$$plugin_id"
-          for path in \
-            "./customsrc/$$plugin_id" \
-            "/home/node/.openclaw/workspace/customsrc/$$plugin_id" \
-            "/home/node/.openclaw/workspace/openclaw/customsrc/$$plugin_id" \
-            "/home/node/.openclaw/workspace/$$plugin_id" \
-            "/home/node/.openclaw/workspace/plugins/$$plugin_id"; do
-            if [ -d "$$path" ]; then
-              install_plugin_from_path "$$plugin_id" "$$path"
-              return
-            fi
-          done
-          if [ -d "$$cached_path" ]; then
-            install_plugin_from_path "$$plugin_id" "$$cached_path"
-            return
-          fi
-          echo "[init] $$plugin_id path missing and remote fetch failed"
-        }
-        prepare_remote_plugin townhall-plugin "https://bored-agents.mypinata.cloud/ipfs/bafybeibbpr7pti3rju4punlmkgsqib2zqufinibsfixvllvcx7k7r42ej4/" || echo "[init] townhall-plugin remote fetch FAILED"
-        prepare_remote_plugin polymarket-cli-plugin "https://bored-agents.mypinata.cloud/ipfs/bafybeidswjoonryqiwicvpcxgrr7lop24bzyibxpa3e27d3qertuida46q/" || echo "[init] polymarket-cli-plugin remote fetch FAILED"
-        install_plugin townhall-plugin
-        install_plugin polymarket-cli-plugin
         exec node openclaw.mjs gateway --allow-unconfigured --bind $${OPENCLAW_GATEWAY_BIND:-loopback} --port 18789

@@ -10,6 +10,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       TELEGRAM_OWNER_ID: ${TELEGRAM_OWNER_ID:-}
+      TOWNHALL_WEBHOOK_TOKEN: ${TOWNHALL_WEBHOOK_TOKEN:-}
       OPENCLAW_VERBOSE: "1"
     volumes:
       - /ape-011:/home/node/.openclaw
@@ -28,6 +29,11 @@ services:
           else
             TG_BLOCK='"telegram": { "enabled": false }'
           fi
+          if [ -n "$$TOWNHALL_WEBHOOK_TOKEN" ]; then
+            HOOKS_BLOCK='"hooks": { "enabled": true, "path": "/hooks", "token": "'"$$TOWNHALL_WEBHOOK_TOKEN"'", "allowRequestSessionKey": true },'
+          else
+            HOOKS_BLOCK='"hooks": { "enabled": false },'
+          fi
           cat > /home/node/.openclaw/openclaw.json << ENDOFCONFIG
         {
           "agents": {
@@ -37,6 +43,7 @@ services:
             }
           },
           "commands": { "native": "auto", "nativeSkills": "auto", "restart": true },
+          $$HOOKS_BLOCK
           "channels": { $$TG_BLOCK },
           "gateway": {
             "mode": "local",
@@ -46,8 +53,5 @@ services:
         }
         ENDOFCONFIG
           echo "[init] default openclaw.json written"
-        fi
-        if [ ! -d /home/node/.openclaw/extensions/townhall-plugin ]; then
-          node openclaw.mjs plugins install /app/customsrc/townhall-plugin --link 2>/dev/null || echo "[init] townhall-plugin install skipped"
         fi
         exec node openclaw.mjs gateway --allow-unconfigured --bind $${OPENCLAW_GATEWAY_BIND:-loopback} --port 18789
