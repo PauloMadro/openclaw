@@ -1,0 +1,65 @@
+services:
+  openclaw-gateway:
+    image: ${OPENCLAW_IMAGE:-alpine/openclaw:main}
+    environment:
+      HOME: /home/node
+      TERM: xterm-256color
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      TELEGRAM_OWNER_ID: ${TELEGRAM_OWNER_ID:-}
+      TOWNHALL_WEBHOOK_TOKEN: ${TOWNHALL_WEBHOOK_TOKEN:-}
+      OPENCLAW_VERBOSE: "1"
+    volumes:
+      - /ape-012:/home/node/.openclaw
+      - /ape-012/workspace:/home/node/.openclaw/workspace
+    ports:
+      - "${OPENCLAW_GATEWAY_PORT:-18809}:18789"
+      - "${OPENCLAW_BRIDGE_PORT:-18810}:18790"
+    init: true
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ ! -f /home/node/.openclaw/openclaw.json ]; then
+          if [ -n "$$TELEGRAM_BOT_TOKEN" ]; then
+            TG_BLOCK='"telegram": { "enabled": true, "botToken": "'"$$TELEGRAM_BOT_TOKEN"'", "dmPolicy": "allowlist", "allowFrom": ["'"$$TELEGRAM_OWNER_ID"'"], "groupPolicy": "allowlist", "streaming": "off" }'
+          else
+            TG_BLOCK='"telegram": { "enabled": false }'
+          fi
+          if [ -n "$$TOWNHALL_WEBHOOK_TOKEN" ]; then
+            HOOKS_BLOCK='"hooks": { "enabled": true, "path": "/hooks", "token": "'"$$TOWNHALL_WEBHOOK_TOKEN"'", "allowRequestSessionKey": true },'
+          else
+            HOOKS_BLOCK='"hooks": { "enabled": false },'
+          fi
+          if [ -n "$$OPENROUTER_API_KEY" ]; then
+            MODEL_PRIMARY="openrouter/google/gemini-3-flash-preview"
+          elif [ -n "$$ANTHROPIC_API_KEY" ]; then
+            MODEL_PRIMARY="claude-haiku-4-5-20251001"
+          else
+            echo "[init] ERROR: No API key found. Set OPENROUTER_API_KEY or ANTHROPIC_API_KEY." >&2
+            exit 1
+          fi
+          cat > /home/node/.openclaw/openclaw.json << ENDOFCONFIG
+        {
+          "agents": {
+            "defaults": {
+              "model": { "primary": "$$MODEL_PRIMARY" },
+              "compaction": { "mode": "safeguard" }
+            }
+          },
+          "commands": { "native": "auto", "nativeSkills": "auto", "restart": true },
+          $$HOOKS_BLOCK
+          "channels": { $$TG_BLOCK },
+          "gateway": {
+            "mode": "local",
+            "bind": "loopback",
+            "auth": { "mode": "token", "token": "$$OPENCLAW_GATEWAY_TOKEN" }
+          }
+        }
+        ENDOFCONFIG
+          echo "[init] default openclaw.json written"
+        fi
+        exec node openclaw.mjs gateway --allow-unconfigured --bind $${OPENCLAW_GATEWAY_BIND:-loopback} --port 18789
